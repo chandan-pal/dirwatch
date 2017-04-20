@@ -4,24 +4,42 @@
 """
 
 # Parms
-dir_path = '/home/sambuddha/Dungeon/Code/python/github/dirwatch/trgt/'
-expir_days = 120
+dir_path = '\\\\192.168.33.3\\testDirWatch'
+expir_days = 30
 archive_dir = 'ARCHIVE'
 
 # imports
 import os, datetime, shutil
 
 # Func Defs
-def overcopy(from_path, to_path):
+def overmove(from_path, to_path):
     """
-        copies dir trees gracefully
+        copies files and dir trees gracefully without overwriting previous files
     """
-    print('in method')
+    # print('        In FUNC overcopy.')
     if os.path.exists(to_path):
+        print('        Path exists: {}'.format(to_path))
         fpath, fname = os.path.split(to_path)
         # Append timestamp to target path
-        to_path = os.path.join(fpath, '{}_{}'.format(fname, str(datetime.date.today())))
-    shutil.copytree(from_path, to_path)
+        tstamp = str(datetime.date.today())
+        if os.path.isdir(from_path):
+            to_path = os.path.join(fpath, '{}_{}'.format(fname, tstamp))
+        else:
+            fnames = fname.split('.')
+            to_path = os.path.join(fpath, '{}_{}.{}'.format(fnames[0], tstamp, fnames[1]))
+    try:
+        if os.path.isdir(from_path):
+            # Copy and del src dir
+            shutil.copytree(from_path, to_path)
+            shutil.rmtree(from_path)
+        else:
+            # Copy and del src file
+            shutil.copy2(from_path, to_path)
+            os.remove(from_path)
+    except Exception as ex:
+        print('        ERROR Copying File/Tree: \'{}\' to \'{}\': {}'.format(from_path, to_path, str(ex)))
+        raise IOError('Tree Copy Error in func overcopy.')
+    # print('        Copied tree to "{}". Exiting.'.format(to_path))
 
 # Main block START
 # Timestamp
@@ -29,18 +47,19 @@ currtime = datetime.datetime.now()
 # Scan through subdirs
 entryItr = os.scandir(dir_path)
 for iEntry in entryItr:
-    print('DIR: ' + iEntry.name)
+    print('File/Dir: ' + iEntry.name)
     if iEntry.name != archive_dir:
-        modtime = datetime.datetime.fromtimestamp(iEntry.stat().st_atime)
+        modtime = datetime.datetime.fromtimestamp(iEntry.stat().st_mtime)
         dirAge = currtime - modtime
+        print('    Last modified on {}; {} days old.'.format(modtime.strftime('%d-%b-%Y %H:%M:%S'), dirAge.days))
         # Check if older than expiration
         # if dirAge.seconds > expir_days:
         if dirAge.days > expir_days:
+            print('    Attempting archiving.')
             try:
                 # Copy directory and contents into archive_dir
-                overcopy(iEntry.path, os.path.join(dir_path, archive_dir, iEntry.name))
-                shutil.rmtree(iEntry.path)
+                overmove(iEntry.path, os.path.join(dir_path, archive_dir, iEntry.name))
+                print('    Moved.')
             except Exception as ex:
-                print('ERROR backing up dir \'{}\': {}'.format(iEntry.name, str(ex)))
-        # print('Dir "{}" last modified on {}; {} days old.'.format(iEntry.name, modtime.strftime('%d-%b-%Y %H:%M:%S'), dirAge.days))
+                print('    ERROR moving entry \'{}\': {}'.format(iEntry.name, str(ex)))
 # Main block END
